@@ -52,16 +52,16 @@
 char buf[BUFSZ];
 char *ip;
 int port;
+int sourceport = -1;
 int verbose;
 char *prog;
 
-#define MAX_DESTS 20
-int ndests = 0;
-struct sockaddr_in dest[MAX_DESTS];
+
+struct sockaddr_in dest;
 
 void usage() {
     fprintf(stderr, "usage: %s [-v] [-l <bind-addr>] "
-            "-p <port> -s <host>[:<port>] ...\n", prog);
+            "-p <bindport> -s <host>[:<port>] [-S sourceport] ...\n", prog);
     exit(-1);
 }
 
@@ -73,16 +73,12 @@ void add_destination(char *host) {
         fprintf(stderr, "specify -p <port> before destination addresses\n");
         exit(-1);
     }
-    if (ndests >= MAX_DESTS) {
-        fprintf(stderr, "too many UDP destinations\n");
-        exit(-1);
-    }
     colon = strrchr(host,':');
     dst_port = colon ? atoi(colon+1) : port;
     if (colon) *colon = '\0';
     
-    dest[ndests].sin_family = AF_INET;
-    dest[ndests].sin_port = htons(dst_port);
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(dst_port);
     
     struct hostent *h = gethostbyname(host);
     if (!h || !h->h_length) {
@@ -90,16 +86,16 @@ void add_destination(char *host) {
         exit(-1);
     }
     
-    memcpy(&dest[ndests].sin_addr, h->h_addr, h->h_length);
-    if (dest[ndests].sin_addr.s_addr == INADDR_NONE) {
+    memcpy(&dest.sin_addr, h->h_addr, h->h_length);
+    if (dest.sin_addr.s_addr == INADDR_NONE) {
         fprintf(stderr, "invalid IP address for %s\n", host);
         exit(-1);
     }
     
     if (verbose) fprintf(stderr,"repeat-to %s (%s):%d\n", host,
-                         inet_ntoa(dest[ndests].sin_addr), dst_port);
+                         inet_ntoa(dest.sin_addr), dst_port);
     
-    ndests++;
+ 
 }
 
 int main(int argc, char** argv) {
@@ -107,26 +103,26 @@ int main(int argc, char** argv) {
     
     char address[234]="localhost:7001";
     
-     char* n_argv[] = { "udpforaward", "-vp", "7000", "-s",address,NULL};
+    char* n_argv[] = { "udpforaward", "-vp", "7000", "-s",address,"-S","6067",NULL};
     argv = n_argv;
-    argc=5;
+    argc=7;
     
     
     prog = argv[0];
     int i, rc, sc, opt;
     
-    while ( (opt = getopt(argc, argv, "v+l:p:s:")) != -1) {
+    while ( (opt = getopt(argc, argv, "v+l:p:s:S:")) != -1) {
         switch (opt) {
                 case 'v': verbose++; break;
                 case 'l': ip = strdup(optarg); break;
                 case 'p': port = atoi(optarg); break;
                 case 's': add_destination(optarg); break;
+                case 'S': sourceport = atoi(optarg); break;
             default: usage(); break;
         }
     }
     
     if (!port) usage();
-    if (!ndests) usage();
     
     in_addr_t listen_addr;
     if (ip) {
@@ -159,22 +155,28 @@ int main(int argc, char** argv) {
      * bind socket to address and port we'd like to receive on
      *********************************************************/
     if (bind(fd, (struct sockaddr*)&sin, sizeof(sin)) == -1) {
-        fprintf(stderr, "linsten bind to %s:%d failed: %s\n", ip, port, strerror(errno));
+        fprintf(stderr, "listen bind to %s:%d failed: %s\n", ip, port, strerror(errno));
         exit(-1);
     }
     
-    struct sockaddr_in sin2;
-    sin2.sin_family = AF_INET;
-    sin2.sin_addr.s_addr = listen_addr;
-    sin2.sin_port = htons(port +10);
-
-    if (bind(rd, (struct sockaddr*)&sin2, sizeof(sin2)) == -1) {
-        fprintf(stderr, "sorce address bind to %s:%d failed: %s\n", ip, ntohs(sin2.sin_port) , strerror(errno));
-        exit(-1);
-    }else
+    if(sourceport!= -1)
     {
-        fprintf(stderr, "sorce address bind to %s:%d ", ip, ntohs(sin2.sin_port));
-    
+        
+        struct sockaddr_in sin2;
+        sin2.sin_family = AF_INET;
+        sin2.sin_addr.s_addr = listen_addr;
+        sin2.sin_port = htons(sourceport );
+        
+        if (bind(rd, (struct sockaddr*)&sin2, sizeof(sin2)) == -1) {
+            fprintf(stderr, "source address bind to %s:%d failed: %s\n", ip, ntohs(sin2.sin_port) , strerror(errno));
+            exit(-1);
+        }else
+        {
+            fprintf(stderr, "source address bind to %s:%d ", ip, ntohs(sin2.sin_port));
+            
+        }
+        
+
     }
     
     
@@ -186,7 +188,19 @@ int main(int argc, char** argv) {
         struct sockaddr_in cin;
         socklen_t cin_sz = sizeof(cin);
         
+        fd_set readfds;
         
+        FD_ZERO(&readfds);
+        FD_SET(fd,&readfds);
+        FD_SET(rd,&readfds);
+
+        
+
+        
+        select(rd+1, &readfds, NULL, NULL, NULL);
+        
+        if(FD_ISSET(fd, &readfds))
+        {
         
         
         rc = recvfrom(fd,buf,BUFSZ,0,(struct sockaddr*)&cin,&cin_sz);
@@ -197,8 +211,8 @@ int main(int argc, char** argv) {
                                    "received %d bytes from %s:%d\n", len,
                                    inet_ntoa(cin.sin_addr), (int)ntohs(cin.sin_port));
             if (verbose>1) fprintf(stderr, "%.*s\n", len, buf);
-            for(i=0; i < ndests; i++) {
-                struct sockaddr_in *d = &dest[i];
+
+                struct sockaddr_in *d = &dest;
                 if (verbose) fprintf(stderr, "sending %d bytes to %s:%d\n", len,
                                      inet_ntoa(d->sin_addr), (int)ntohs(d->sin_port));
                 sc = sendto(rd, buf, len, 0, (struct sockaddr*)d, sizeof(*d));
@@ -206,8 +220,41 @@ int main(int argc, char** argv) {
                     fprintf(stderr, "sendto %s: %s\n", inet_ntoa(d->sin_addr),
                             (sc<0)?strerror(errno):"partial write");
                     exit(-1);
-                }
+                
+            }
             }
         }
+        
+        
+        
+        if(FD_ISSET(rd, &readfds))
+        {
+            
+            
+            rc = recvfrom(rd,buf,BUFSZ,0,(struct sockaddr*)&cin,&cin_sz);
+            if (rc==-1) fprintf(stderr,"recvfrom: %s\n", strerror(errno));
+            else {
+                int len = rc;
+                if (verbose>0) fprintf(stderr,
+                                       "received %d bytes from %s:%d\n", len,
+                                       inet_ntoa(cin.sin_addr), (int)ntohs(cin.sin_port));
+                if (verbose>1) fprintf(stderr, "%.*s\n", len, buf);
+                    struct sockaddr_in *d = &dest;
+                    if (verbose) fprintf(stderr, "sending %d bytes to %s:%d\n", len,
+                                         inet_ntoa(d->sin_addr), (int)ntohs(d->sin_port));
+                    sc = sendto(fd, buf, len, 0, (struct sockaddr*)&sin, sizeof(sin));
+                    if (sc != len) {
+                        fprintf(stderr, "sendto %s: %s\n", inet_ntoa(sin.sin_addr),
+                                (sc<0)?strerror(errno):"partial write");
+                        exit(-1);
+                    }
+                
+            }
+        }
+
+        
+        
+        
+        
     } while (rc >= 0);
 }
