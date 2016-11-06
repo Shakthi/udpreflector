@@ -7,6 +7,7 @@
 //
 
 #include <iostream>
+#include <string>
 
 #include <stdio.h>
 #include <errno.h>
@@ -22,13 +23,12 @@
  *
  * example of use
  *
- *   udp-repeater -p 6180 -s destination1.net -s destination2.net:9199
+ *   udp-reflector -p 6180 -l localhost -a node1.net:2222 -b node2.net:2222
  *
- * This causes udp-repeater to listen on the local matchine (port 6180;
+ * This causes udp-reflector to listen on the local matchine (port 6180;
  * you can also bind a particular local IP address with the -l flag).
- * Whenever a UDP datagram is received, it is re-sent to each destination
- * (specified with the -s flag) on the same port as we received it on,
- * or to the specified port (:9199) for a particular destination.
+ * Whenever a UDP datagram is received from a, it is re-sent to destination b
+ * (specified with the -b flag), and vice versa
  *
  * To test it, run udp-repeater with appropriate arguments, set up a sink
  * to receive the datagrams somewhere, like:
@@ -50,11 +50,12 @@
 
 #define BUFSZ 2000
 char buf[BUFSZ];
-char *ip;
+char *ip,*prog;
 int port;
-int sourceport = -1;
+
+
 int verbose;
-char *prog;
+
 
 
 struct sockaddr_in dest;
@@ -65,62 +66,149 @@ void usage() {
     exit(-1);
 }
 
-void add_destination(char *host) {
-    char *colon;
-    int dst_port;
-    
-    if (!port) {
-        fprintf(stderr, "specify -p <port> before destination addresses\n");
-        exit(-1);
-    }
-    colon = strrchr(host,':');
-    dst_port = colon ? atoi(colon+1) : port;
-    if (colon) *colon = '\0';
-    
-    dest.sin_family = AF_INET;
-    dest.sin_port = htons(dst_port);
-    
-    struct hostent *h = gethostbyname(host);
-    if (!h || !h->h_length) {
-        fprintf(stderr, "could not resolve %s: %s\n", host, hstrerror(h_errno));
-        exit(-1);
-    }
-    
-    memcpy(&dest.sin_addr, h->h_addr, h->h_length);
-    if (dest.sin_addr.s_addr == INADDR_NONE) {
-        fprintf(stderr, "invalid IP address for %s\n", host);
-        exit(-1);
-    }
-    
-    if (verbose) fprintf(stderr,"repeat-to %s (%s):%d\n", host,
-                         inet_ntoa(dest.sin_addr), dst_port);
-    
- 
-}
 
-int main(int argc, char** argv) {
+
+
+class SocketAddress
+{
+    struct sockaddr_in socketAddress;
+    
+
     
     
-    char address[234]="localhost:7001";
     
-    char* n_argv[] = { "udpforaward", "-vp", "7000", "-s",address,"-S","6067",NULL};
+    
+    sockaddr_in getAddress(std::string address)
+    {
+        std::string::size_type colonpos=address.find(':');
+        if(colonpos == std::string::npos)
+        {
+            std::cerr <<"Unformated address"<<address<<" host:port format expected"<<std::endl;
+            exit(-1);
+        }
+        
+        
+        
+        std::string host= address.substr(0,colonpos);
+        std::string port= address.substr(colonpos);
+        
+        
+        sockaddr_in dest;
+        
+        dest.sin_family = AF_INET;
+        dest.sin_port = htons(atoi(port.c_str()));
+        struct hostent *h = gethostbyname(host.c_str());
+        if (!h || !h->h_length) {
+            fprintf(stderr, "could not resolve %s: %s\n", host.c_str(), hstrerror(h_errno));
+            exit(-1);
+        }
+        
+        memcpy(&dest.sin_addr, h->h_addr, h->h_length);
+        if (dest.sin_addr.s_addr == INADDR_NONE) {
+            fprintf(stderr, "invalid IP address for %s\n", host.c_str());
+            exit(-1);
+        }
+        
+        
+        if (verbose) fprintf(stderr,"repeat-to %s (%s):%d\n", host.c_str(),
+                             inet_ntoa(dest.sin_addr), atoi(port.c_str()));
+        
+        
+        return dest;
+    }
+    
+public:
+    static int fd;
+    
+    SocketAddress()
+    {}
+    SocketAddress(std::string hostport)
+    {
+        initialized=true;
+        socketAddress = getAddress(hostport);
+    }
+    
+    SocketAddress(sockaddr_in addr)
+    {
+        initialized=true;
+        socketAddress = addr;
+    }
+    
+    
+    bool operator==(const SocketAddress & bAddress) const
+    {
+        return socketAddress.sin_addr.s_addr  == bAddress.socketAddress.sin_addr.s_addr &&
+        socketAddress.sin_port == bAddress.socketAddress.sin_port;
+        
+        
+    }
+
+
+    bool initialized = false;
+    
+    bool Send(void * buffer,size_t len)
+    {
+    
+        ssize_t sc = sendto(fd, buffer, len, 0, (struct sockaddr*)&socketAddress, sizeof(&socketAddress));
+        if (sc != len) {
+            fprintf(stderr, "sendto %s: %s\n", inet_ntoa(socketAddress.sin_addr),
+                    (sc==0)?strerror(errno):"partial write");
+            exit(-1);
+        }
+       return true;
+    }
+    
+    static const SocketAddress ReciveAny(void * buffer,size_t & len)
+    {
+    
+        struct sockaddr_in cin;
+        socklen_t cin_sz = sizeof(cin);
+        
+        size_t rc = recvfrom(fd,buf,BUFSZ,0,(struct sockaddr*)&cin,&cin_sz);
+        len = rc;
+        return SocketAddress(cin);
+    
+    }
+
+
+};
+
+int SocketAddress::fd;
+
+
+
+int main(int argc, const char** argv) {
+    
+    
+    
+    const char* n_argv[] = { "udpforaward", "-vp", "7000", "-s","localhost:7001"};
     argv = n_argv;
     argc=7;
     
     
-    prog = argv[0];
-    int i, rc, sc, opt;
     
-    while ( (opt = getopt(argc, argv, "v+l:p:s:S:")) != -1) {
+    
+     prog = strdup(argv[0]);
+    char  opt;
+    
+    bool aset=false,bset=false;
+    SocketAddress sa;
+    SocketAddress sb;
+
+    
+    while ( (opt = getopt(argc, (char* * const )argv, "v+l:p:a:b:")) != -1) {
         switch (opt) {
                 case 'v': verbose++; break;
                 case 'l': ip = strdup(optarg); break;
                 case 'p': port = atoi(optarg); break;
-                case 's': add_destination(optarg); break;
-                case 'S': sourceport = atoi(optarg); break;
+                case 'a': sa = SocketAddress(optarg);aset=true; break;
+                case 'b': sb = SocketAddress(optarg);bset=true; break;
             default: usage(); break;
         }
     }
+    
+    
+    
     
     if (!port) usage();
     
@@ -132,16 +220,15 @@ int main(int argc, char** argv) {
         }
     } else {
         listen_addr = htonl(INADDR_ANY);
-        ip = "all-local-addresses";
+        ip = strdup("all-local-addresses");
     }
     if (verbose) fprintf(stderr, "local address: %s:%d\n", ip, port);
     
     /**********************************************************
      * create two IPv4/UDP sockets, for listener and repeater
      *********************************************************/
-    int fd = socket(AF_INET, SOCK_DGRAM, 0);
-    int rd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd == -1 || rd == -1) { fprintf(stderr,"socket error\n"); exit(-1); }
+    SocketAddress::fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (SocketAddress::fd == -1 ) { fprintf(stderr,"socket error\n"); exit(-1); }
     
     /**********************************************************
      * internet socket address structure: our address and port
@@ -154,107 +241,65 @@ int main(int argc, char** argv) {
     /**********************************************************
      * bind socket to address and port we'd like to receive on
      *********************************************************/
-    if (bind(fd, (struct sockaddr*)&sin, sizeof(sin)) == -1) {
+    if (bind(SocketAddress::fd, (struct sockaddr*)&sin, sizeof(sin)) == -1) {
         fprintf(stderr, "listen bind to %s:%d failed: %s\n", ip, port, strerror(errno));
         exit(-1);
     }
     
-    if(sourceport!= -1)
-    {
+    
+    
+    while (true)  {
         
-        struct sockaddr_in sin2;
-        sin2.sin_family = AF_INET;
-        sin2.sin_addr.s_addr = listen_addr;
-        sin2.sin_port = htons(sourceport );
+        /**********************************************************
+         * uses recvfrom to get data along with client address/port
+         *********************************************************/
         
-        if (bind(rd, (struct sockaddr*)&sin2, sizeof(sin2)) == -1) {
-            fprintf(stderr, "source address bind to %s:%d failed: %s\n", ip, ntohs(sin2.sin_port) , strerror(errno));
-            exit(-1);
-        }else
+        
+        size_t len;
+        SocketAddress recivedAddress = SocketAddress::ReciveAny(buf, len);
+        
+        
+        if(sa.initialized && sb.initialized)
         {
-            fprintf(stderr, "source address bind to %s:%d ", ip, ntohs(sin2.sin_port));
+            if(recivedAddress == sa)
+            {
+                sb.Send(buf, len);
+            }
             
+            else if(recivedAddress == sb)
+            {
+                sa.Send(buf, len);
+            }
+            else
+            {
+                printf("Discarding ");
+            }
+        }else if(sa.initialized && ! sb.initialized)
+        {
+            
+            
+            if(!(recivedAddress==sa))
+            {
+                sb= recivedAddress;
+            
+            }else
+            {
+                printf("Discarding  ");
+            }
+        
+        
+        }else if (!sa.initialized && ! sb.initialized)
+        {
+        
+            sa = recivedAddress;
+        
         }
         
-
+        
+        
+        
     }
     
-    
-    
-    /**********************************************************
-     * uses recvfrom to get data along with client address/port
-     *********************************************************/
-    do {
-        struct sockaddr_in cin;
-        socklen_t cin_sz = sizeof(cin);
-        
-        fd_set readfds;
-        
-        FD_ZERO(&readfds);
-        FD_SET(fd,&readfds);
-        FD_SET(rd,&readfds);
-
-        
-
-        
-        select(rd+1, &readfds, NULL, NULL, NULL);
-        
-        if(FD_ISSET(fd, &readfds))
-        {
         
         
-        rc = recvfrom(fd,buf,BUFSZ,0,(struct sockaddr*)&cin,&cin_sz);
-        if (rc==-1) fprintf(stderr,"recvfrom: %s\n", strerror(errno));
-        else {
-            int len = rc;
-            if (verbose>0) fprintf(stderr,
-                                   "received %d bytes from %s:%d\n", len,
-                                   inet_ntoa(cin.sin_addr), (int)ntohs(cin.sin_port));
-            if (verbose>1) fprintf(stderr, "%.*s\n", len, buf);
-
-                struct sockaddr_in *d = &dest;
-                if (verbose) fprintf(stderr, "sending %d bytes to %s:%d\n", len,
-                                     inet_ntoa(d->sin_addr), (int)ntohs(d->sin_port));
-                sc = sendto(rd, buf, len, 0, (struct sockaddr*)d, sizeof(*d));
-                if (sc != len) {
-                    fprintf(stderr, "sendto %s: %s\n", inet_ntoa(d->sin_addr),
-                            (sc<0)?strerror(errno):"partial write");
-                    exit(-1);
-                
-            }
-            }
-        }
-        
-        
-        
-        if(FD_ISSET(rd, &readfds))
-        {
-            
-            
-            rc = recvfrom(rd,buf,BUFSZ,0,(struct sockaddr*)&cin,&cin_sz);
-            if (rc==-1) fprintf(stderr,"recvfrom: %s\n", strerror(errno));
-            else {
-                int len = rc;
-                if (verbose>0) fprintf(stderr,
-                                       "received %d bytes from %s:%d\n", len,
-                                       inet_ntoa(cin.sin_addr), (int)ntohs(cin.sin_port));
-                if (verbose>1) fprintf(stderr, "%.*s\n", len, buf);
-                    struct sockaddr_in *d = &dest;
-                    if (verbose) fprintf(stderr, "sending %d bytes to %s:%d\n", len,
-                                         inet_ntoa(d->sin_addr), (int)ntohs(d->sin_port));
-                    sc = sendto(fd, buf, len, 0, (struct sockaddr*)&sin, sizeof(sin));
-                    if (sc != len) {
-                        fprintf(stderr, "sendto %s: %s\n", inet_ntoa(sin.sin_addr),
-                                (sc<0)?strerror(errno):"partial write");
-                        exit(-1);
-                    }
-                
-            }
-        }
-
-        
-        
-        
-        
-    } while (rc >= 0);
 }
