@@ -167,14 +167,14 @@ public:
     
         ssize_t sc = sendto(fd, buffer, len, 0, (struct sockaddr*)&socketAddress, sizeof(&socketAddress));
         if (sc != len) {
-            fprintf(stderr, "sendto %s: %s\n", inet_ntoa(socketAddress.sin_addr),
-                    (sc==0)?strerror(errno):"partial write");
+            std::cerr<< "sendto " << inet_ntoa(socketAddress.sin_addr)<<((sc==0)?strerror(errno):"partial write");
+            
             exit(-1);
         }
         
         
         if(verbose>0)
-            fprintf(stderr, "send %zu bytes to %s\n", len,to_string().c_str());
+            std::cerr<< "sent " <<len<<" bytes to "<<to_string()<<std::endl;
             
             
         
@@ -194,7 +194,7 @@ public:
         
         
         if(verbose>0)
-            fprintf(stderr, "recieved %zu bytes from %s\n", rc,sa.to_string().c_str());
+            std::cerr<< "recieved "<<rc<<" bytes from " <<sa.to_string()<<std::endl;
         
 
         
@@ -218,19 +218,20 @@ int main(int argc, const char** argv) {
     
         const char* n_argv[] = { "udpforaward", "-vp", "6008", "-l","127.0.0.1","-a",
             "127.0.0.1:60001","-B","127.0.0.1:7001"};
-        
-        const char* m_argv[] = { "udpforaward", "-vp", "7001", "-l","127.0.0.1","-1","-b","127.0.0.1:50001"};
-        
-    argv = n_argv;
 #if CLIENT
+        
+    const char* m_argv[] = { "udpforaward", "-vp", "7001", "-l","127.0.0.1","-1","-b","127.0.0.1:50001"}
     argv = m_argv;
+#else
+    argv = n_argv;
 #endif
+        
     argc=9;
     
     }
     
     
-     prog = strdup(argv[0]);
+    prog = strdup(argv[0]);
     char  opt;
     
     SocketAddress sa;
@@ -368,7 +369,7 @@ int main(int argc, const char** argv) {
             }
             else
             {
-                printf("Discarding ");
+                std::cerr<<"Discarding "<<len<<"bytes from"<<recivedAddress.to_string()<<std::endl;
             }
         }else if(sa.initialized && ! sb.initialized)
         {
@@ -385,7 +386,7 @@ int main(int argc, const char** argv) {
             
             }else
             {
-                printf("Discarding  ");
+                std::cerr<<"Discarding "<<len<<"bytes from"<<recivedAddress.to_string()<<std::endl;
             }
         
         
@@ -423,9 +424,8 @@ int main(int argc, const char** argv) {
             std::string testConnection=std::string(buf,len);
             if(testConnection=="testConnection")
             {
-                connecta =false;
-                fprintf(stderr, "connection scuccedded  to %s\n", sa.to_string().c_str());
-
+                connecta = false;
+                std::cerr<< "connection scuccedded  to "<<sa.to_string();
                 
             }
             
@@ -439,7 +439,7 @@ int main(int argc, const char** argv) {
             std::string testConnection=std::string(buf,len);
             if(testConnection==testConnection1)
             {
-                fprintf(stderr, "connection scuccedded  to %s\n", sb.to_string().c_str());
+               std::cerr<< "connection scuccedded  to "<<sb.to_string();
                 connectb =false;
             }
             
