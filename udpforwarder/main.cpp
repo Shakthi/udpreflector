@@ -18,6 +18,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <poll.h>
 
 /* udp-repeater
  *
@@ -90,7 +91,7 @@ class SocketAddress
         
         
         std::string host= address.substr(0,colonpos);
-        std::string port= address.substr(colonpos);
+        std::string port= address.substr(colonpos+1);
         
         
         sockaddr_in dest;
@@ -146,6 +147,20 @@ public:
 
     bool initialized = false;
     
+    const std::string  to_string()
+    {
+        std::string address =inet_ntoa(socketAddress.sin_addr);
+        address+=":";
+        
+        address+=std::to_string(ntohs(socketAddress.sin_port) );
+        
+        
+        
+        
+        return address;
+        
+    
+    }
     bool Send(void * buffer,size_t len)
     {
     
@@ -155,18 +170,34 @@ public:
                     (sc==0)?strerror(errno):"partial write");
             exit(-1);
         }
+        
+        
+        if(verbose>0)
+            fprintf(stderr, "send %zu bytes to %s\n", len,to_string().c_str());
+            
+            
+        
        return true;
     }
     
     static const SocketAddress ReciveAny(void * buffer,size_t & len)
     {
     
+        
         struct sockaddr_in cin;
         socklen_t cin_sz = sizeof(cin);
         
         size_t rc = recvfrom(fd,buf,BUFSZ,0,(struct sockaddr*)&cin,&cin_sz);
         len = rc;
-        return SocketAddress(cin);
+        SocketAddress sa(cin);
+        
+        
+        if(verbose>0)
+            fprintf(stderr, "recieved %zu bytes from %s\n", rc,sa.to_string().c_str());
+        
+
+        
+        return sa;
     
     }
 
@@ -177,32 +208,54 @@ int SocketAddress::fd;
 
 
 
+
+
 int main(int argc, const char** argv) {
     
+    if(argc<2)
+    {
     
-    
-    const char* n_argv[] = { "udpforaward", "-vp", "7000", "-s","localhost:7001"};
+        const char* n_argv[] = { "udpforaward", "-vp", "6008", "-l","127.0.0.1","-a",
+            "127.0.0.1:60001","-B","127.0.0.1:7001"};
+        
+        const char* m_argv[] = { "udpforaward", "-vp", "7001", "-l","127.0.0.1","-1","-b","127.0.0.1:50001"};
+        
     argv = n_argv;
-    argc=7;
+#if CLIENT
+    argv = m_argv;
+#endif
+    argc=9;
     
-    
+    }
     
     
      prog = strdup(argv[0]);
     char  opt;
     
-    bool aset=false,bset=false;
     SocketAddress sa;
     SocketAddress sb;
 
     
-    while ( (opt = getopt(argc, (char* * const )argv, "v+l:p:a:b:")) != -1) {
+    bool connecta=false,connectb=false;
+    
+    bool revieveb=false,recievea=false;
+
+    
+    
+    
+    while ( (opt = getopt(argc, (char* * const )argv, "v+l:p:a:b:A:B:12")) != -1) {
         switch (opt) {
                 case 'v': verbose++; break;
                 case 'l': ip = strdup(optarg); break;
                 case 'p': port = atoi(optarg); break;
-                case 'a': sa = SocketAddress(optarg);aset=true; break;
-                case 'b': sb = SocketAddress(optarg);bset=true; break;
+                case 'a': sa = SocketAddress(optarg); break;
+                case 'b': sb = SocketAddress(optarg); break;
+                
+                case 'A': sa = SocketAddress(optarg); connecta=true;break;
+                case 'B': sb = SocketAddress(optarg); connectb=true;break;
+                case '1':  recievea=true;break;
+                case '2':  revieveb=true;break;
+                
             default: usage(); break;
         }
     }
@@ -248,11 +301,50 @@ int main(int argc, const char** argv) {
     
     
     
+    
     while (true)  {
         
         /**********************************************************
          * uses recvfrom to get data along with client address/port
          *********************************************************/
+        int random= rand();
+        
+        if(sa.initialized && connecta)
+        {
+            std::string testConnection="testConnection"+std::to_string(random);
+            if(verbose>0)
+                fprintf(stderr, "testConnection  to %s\n", sa.to_string().c_str());
+            
+            sa.Send((void*)testConnection.c_str(), testConnection.length());
+            
+            
+        }
+        
+        if (sb.initialized && connectb)
+        {
+            std::string testConnection="testConnection"+std::to_string(random);
+            
+            if(verbose>0)
+                fprintf(stderr, "testConnection  to %s\n", sb.to_string().c_str());
+            sb.Send((void*)testConnection.c_str(), testConnection.length());
+        
+        }
+        
+        if(connectb||connecta)
+        {
+            struct pollfd pfdfd;
+            int ret;
+            
+            pfdfd.fd = SocketAddress::fd; // your socket handler
+            pfdfd.events = POLLIN;
+            ret = poll(&pfdfd, 1, 1000); // 1 second for timeout
+            
+            if(ret == 0 || ret ==-1)
+                continue;
+        }
+        
+        
+        
         
         
         size_t len;
@@ -261,13 +353,16 @@ int main(int argc, const char** argv) {
         
         if(sa.initialized && sb.initialized)
         {
-            if(recivedAddress == sa)
+            if(recivedAddress == sa )
             {
+                if(!recievea && !connecta)
                 sb.Send(buf, len);
             }
             
             else if(recivedAddress == sb)
             {
+                if(!revieveb && !connectb)
+
                 sa.Send(buf, len);
             }
             else
@@ -281,6 +376,11 @@ int main(int argc, const char** argv) {
             if(!(recivedAddress==sa))
             {
                 sb= recivedAddress;
+                
+                if(!revieveb)
+                    sa.Send(buf, len);
+              
+
             
             }else
             {
@@ -288,7 +388,27 @@ int main(int argc, const char** argv) {
             }
         
         
-        }else if (!sa.initialized && ! sb.initialized)
+        }else if(!sa.initialized &&  sb.initialized){
+        
+            
+            if(!(recivedAddress==sb))
+            {
+                sa= recivedAddress;
+                
+                if(!recievea)
+                    sb.Send(buf, len);
+                
+                
+            }else
+            {
+                printf("Discarding  ");
+            }
+
+        
+        }
+        
+        
+        else if (!sa.initialized && ! sb.initialized)
         {
         
             sa = recivedAddress;
@@ -297,6 +417,56 @@ int main(int argc, const char** argv) {
         
         
         
+        if(recivedAddress == sa && connecta )
+        {
+            std::string testConnection=std::string(buf,len);
+            if(testConnection=="testConnection")
+            {
+                connecta =false;
+                fprintf(stderr, "connection scuccedded  to %s\n", sa.to_string().c_str());
+
+                
+            }
+            
+            
+        }
+        
+        if (recivedAddress == sb && connectb)
+        {
+            std::string testConnection1="testConnection"+std::to_string(random);
+
+            std::string testConnection=std::string(buf,len);
+            if(testConnection==testConnection1)
+            {
+                fprintf(stderr, "connection scuccedded  to %s\n", sb.to_string().c_str());
+                connectb =false;
+            }
+            
+        }
+
+        
+        if(recivedAddress == sa && recievea )
+        {
+            std::string testConnection=std::string(buf,len);
+            if(testConnection.find("testConnection")==std::string::npos)
+                exit(-1);
+            else
+                recivedAddress.Send((void*)testConnection.c_str(), testConnection.length());
+            
+            
+        }
+        
+        if (recivedAddress == sb && revieveb )
+        {
+            std::string testConnection=std::string(buf,len);
+            if(testConnection.find("testConnection")==std::string::npos)
+                exit(-1);
+            else
+                recivedAddress.Send((void*)testConnection.c_str(), testConnection.length());
+
+            
+        }
+
         
     }
     
