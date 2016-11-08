@@ -82,8 +82,9 @@ class SocketAddress
     sockaddr_in getAddress(std::string address)
     {
         std::string::size_type colonpos=address.find(':');
-        if(colonpos == std::string::npos)
-        {
+        
+        if(colonpos == std::string::npos){
+            
             std::cerr <<"Unformated address"<<address<<" host:port format expected"<<std::endl;
             exit(-1);
         }
@@ -100,19 +101,19 @@ class SocketAddress
         dest.sin_port = htons(atoi(port.c_str()));
         struct hostent *h = gethostbyname(host.c_str());
         if (!h || !h->h_length) {
-            fprintf(stderr, "could not resolve %s: %s\n", host.c_str(), hstrerror(h_errno));
+            std::cerr<< "could not resolve "<<host<<":"<< hstrerror(h_errno)<<std::endl;
             exit(-1);
         }
         
         memcpy(&dest.sin_addr, h->h_addr, h->h_length);
         if (dest.sin_addr.s_addr == INADDR_NONE) {
-            fprintf(stderr, "invalid IP address for %s\n", host.c_str());
+            std::cerr<< "invalid IP address for "<<host<<std::endl;
             exit(-1);
         }
         
         
-        if (verbose) fprintf(stderr,"repeat-to %s (%s):%d\n", host.c_str(),
-                             inet_ntoa(dest.sin_addr), atoi(port.c_str()));
+        if (verbose)
+            std::cerr<<"Node "<<host<<"("<<inet_ntoa(dest.sin_addr)<<":"<< atoi(port.c_str())<<")"<<std::endl;
         
         
         return dest;
