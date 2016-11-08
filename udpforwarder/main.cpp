@@ -216,13 +216,14 @@ int main(int argc, const char** argv) {
     if(argc<2)
     {
     
-        const char* n_argv[] = { "udpforaward", "-vp", "6008", "-l","127.0.0.1","-a",
-            "127.0.0.1:60001","-B","127.0.0.1:7001"};
 #if CLIENT
         
-    const char* m_argv[] = { "udpforaward", "-vp", "7001", "-l","127.0.0.1","-1","-b","127.0.0.1:50001"}
+        const char* m_argv[] = { "udpforaward", "-vp", "7001", "-l","127.0.0.1","-1","-b","127.0.0.1:50001"};
     argv = m_argv;
 #else
+        const char* n_argv[] = { "udpforaward", "-vp", "6008", "-l","127.0.0.1","-a",
+            "127.0.0.1:60001","-B","127.0.0.1:7001"};
+
     argv = n_argv;
 #endif
         
