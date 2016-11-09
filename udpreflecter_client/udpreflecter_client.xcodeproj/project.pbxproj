@@ -25,6 +25,7 @@
 /* Begin PBXFileReference section */
 		53E3BA9D1DD261FF0093EE65 /* udpreflecter_client */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = udpreflecter_client; sourceTree = BUILT_PRODUCTS_DIR; };
 		53E3BAA71DD262690093EE65 /* main.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = main.cpp; path = ../../udpforwarder/main.cpp; sourceTree = "<group>"; };
+		53E3BAAC1DD3AE710093EE65 /* SocketAddress.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = SocketAddress.hpp; path = ../../udpforwarder/SocketAddress.hpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -58,6 +59,7 @@
 			isa = PBXGroup;
 			children = (
 				53E3BAA71DD262690093EE65 /* main.cpp */,
+				53E3BAAC1DD3AE710093EE65 /* SocketAddress.hpp */,
 			);
 			path = udpreflecter_client;
 			sourceTree = "<group>";

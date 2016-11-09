@@ -25,6 +25,7 @@
 /* Begin PBXFileReference section */
 		53020DB71DBC09BF00245D40 /* udpforwarder */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = udpforwarder; sourceTree = BUILT_PRODUCTS_DIR; };
 		53020DBA1DBC09BF00245D40 /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
+		53E3BAAA1DD3ACE40093EE65 /* SocketAddress.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = SocketAddress.hpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -58,6 +59,7 @@
 			isa = PBXGroup;
 			children = (
 				53020DBA1DBC09BF00245D40 /* main.cpp */,
+				53E3BAAA1DD3ACE40093EE65 /* SocketAddress.hpp */,
 			);
 			path = udpforwarder;
 			sourceTree = "<group>";
@@ -239,6 +241,7 @@
 				53020DC01DBC09BF00245D40 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
