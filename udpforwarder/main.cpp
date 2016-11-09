@@ -62,8 +62,7 @@ int verbose;
 struct sockaddr_in dest;
 
 void usage() {
-    fprintf(stderr, "usage: %s [-v] [-l <bind-addr>] "
-            "-p <bindport> -s <host>[:<port>] [-S sourceport] ...\n", prog);
+    std::cerr<<"usage: %s [-v] [-l <bind-addr>] -p <bindport> -s <host>[:<port>] [-S sourceport] ...\n";
     exit(-1);
 }
 
@@ -152,34 +151,32 @@ public:
     {
         std::string address =inet_ntoa(socketAddress.sin_addr);
         address+=":";
-        
         address+=std::to_string(ntohs(socketAddress.sin_port) );
         
-        
-        
-        
         return address;
-        
-    
     }
+    
+    
+    
     bool Send(void * buffer,size_t len)
     {
     
         ssize_t sc = sendto(fd, buffer, len, 0, (struct sockaddr*)&socketAddress, sizeof(&socketAddress));
+        
         if (sc != len) {
             std::cerr<< "sendto " << inet_ntoa(socketAddress.sin_addr)<<((sc==0)?strerror(errno):"partial write");
-            
             exit(-1);
         }
         
         
         if(verbose>0)
             std::cerr<< "sent " <<len<<" bytes to "<<to_string()<<std::endl;
-            
-            
         
        return true;
     }
+    
+    
+    
     
     static const SocketAddress ReciveAny(void * buffer,size_t & len)
     {
@@ -271,20 +268,22 @@ int main(int argc, const char** argv) {
     in_addr_t listen_addr;
     if (ip) {
         if ( (listen_addr = inet_addr(ip)) == INADDR_NONE) {
-            fprintf(stderr,"invalid listener IP address: %s\n", ip);
+            std::cerr<<"invalid listener IP address "<<ip<<std::endl;
             exit(-1);
         }
     } else {
         listen_addr = htonl(INADDR_ANY);
         ip = strdup("all-local-addresses");
     }
-    if (verbose) fprintf(stderr, "local address: %s:%d\n", ip, port);
+    if (verbose)
+        std::cerr<<"listening address: "<<ip<<":"<<port<<std::endl;
+    
     
     /**********************************************************
      * create two IPv4/UDP sockets, for listener and repeater
      *********************************************************/
     SocketAddress::fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (SocketAddress::fd == -1 ) { fprintf(stderr,"socket error\n"); exit(-1); }
+    if (SocketAddress::fd == -1 ) { std::cerr<<"socket error"<<std::endl; exit(-1);}
     
     /**********************************************************
      * internet socket address structure: our address and port
@@ -297,8 +296,10 @@ int main(int argc, const char** argv) {
     /**********************************************************
      * bind socket to address and port we'd like to receive on
      *********************************************************/
+    
+    
     if (bind(SocketAddress::fd, (struct sockaddr*)&sin, sizeof(sin)) == -1) {
-        fprintf(stderr, "listen bind to %s:%d failed: %s\n", ip, port, strerror(errno));
+        std::cerr<<"listen bind to "<<ip<<":"<<port<<" failed with error :"<<strerror(errno)<<std::endl;
         exit(-1);
     }
     
@@ -310,13 +311,13 @@ int main(int argc, const char** argv) {
         /**********************************************************
          * uses recvfrom to get data along with client address/port
          *********************************************************/
-        int random= rand();
+        int random = rand();
         
         if(sa.initialized && connecta)
         {
-            std::string testConnection="testConnection"+std::to_string(random);
+            std::string testConnection="testConnection" + std::to_string(random);
             if(verbose>0)
-                fprintf(stderr, "testConnection  to %s\n", sa.to_string().c_str());
+                std::cerr<<"testConnection  to"<< sa.to_string()<<std::endl;
             
             sa.Send((void*)testConnection.c_str(), testConnection.length());
             
@@ -325,13 +326,16 @@ int main(int argc, const char** argv) {
         
         if (sb.initialized && connectb)
         {
-            std::string testConnection="testConnection"+std::to_string(random);
+            std::string testConnection="testConnection" + std::to_string(random);
             
             if(verbose>0)
-                fprintf(stderr, "testConnection  to %s\n", sb.to_string().c_str());
+                std::cerr<<"testConnection  to"<< sb.to_string()<<std::endl;
+            
+            
             sb.Send((void*)testConnection.c_str(), testConnection.length());
-        
         }
+        
+        
         
         if(connectb||connecta)
         {
@@ -404,7 +408,7 @@ int main(int argc, const char** argv) {
                 
             }else
             {
-                printf("Discarding  ");
+                std::cerr<<"Discarding "<<len<<"bytes from"<<recivedAddress.to_string()<<std::endl;
             }
 
         
