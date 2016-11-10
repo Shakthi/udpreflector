@@ -55,7 +55,7 @@
 
 #define BUFSZ 2000
 char buf[BUFSZ];
-char *ip,*prog;
+const char *ip,*prog;
 int port;
 
 
@@ -115,12 +115,12 @@ int main(int argc, const char** argv) {
     while ( (opt = getopt(argc, (char* * const )argv, "v+l:p:a:b:A:B:12")) != -1) {
         switch (opt) {
                 case 'v': verbose++; break;
-                case 'l': ip = strdup(optarg); break;
+                case 'l': ip = SocketAddress::getIPaddressStringforHost(optarg).c_str(); break;
                 case 'p': port = atoi(optarg); break;
                 case 'a': sa = SocketAddress(optarg); break;
                 case 'b': sb = SocketAddress(optarg); break;
                 
-                case 'A': sa = SocketAddress(optarg); connecta=true;break;
+                case 'A': sa = SocketAddress(optarg); connecta=true;  break;
                 case 'B': sb = SocketAddress(optarg); connectb=true;break;
                 case '1':  recievea=true;break;
                 case '2':  revieveb=true;break;
@@ -146,6 +146,13 @@ int main(int argc, const char** argv) {
     }
     if (verbose)
         std::cerr<<"listening address: "<<ip<<":"<<port<<std::endl;
+    
+    
+    if (verbose && sa.initialized)
+        std::cerr<<"NODE-A initialized "<<sa.to_string()<<std::endl;
+    
+    if (verbose && sb.initialized)
+        std::cerr<<"NODE-B initialized "<<sb.to_string()<<std::endl;;
     
     
     /**********************************************************
@@ -253,6 +260,9 @@ int main(int argc, const char** argv) {
             {
                 sb= recivedAddress;
                 
+                std::cerr<<"registred with NODE-B  address "<<recivedAddress.to_string()<<std::endl;
+
+                
                 if(!revieveb)
                     sa.Send(buf, len);
               
@@ -274,10 +284,11 @@ int main(int argc, const char** argv) {
                 if(!recievea)
                     sb.Send(buf, len);
                 
+                std::cerr<<"registred with NODE-A  address: "<<recivedAddress.to_string()<<std::endl;
                 
             }else
             {
-                std::cerr<<"Discarding "<<len<<"bytes from"<<recivedAddress.to_string()<<std::endl;
+                std::cerr<<"Discarding "<<len<<"bytes from: "<<recivedAddress.to_string()<<std::endl;
             }
 
         
@@ -286,8 +297,11 @@ int main(int argc, const char** argv) {
         
         else if (!sa.initialized && ! sb.initialized)
         {
-        
+
             sa = recivedAddress;
+            std::cerr<<"Registred with NODE-A  address: "<<recivedAddress.to_string()<<std::endl;
+            std::cerr<<"Discarding "<<len<<" bytes from: "<<recivedAddress.to_string()<<std::endl;
+
         
         }
         
@@ -295,13 +309,15 @@ int main(int argc, const char** argv) {
         
         if(recivedAddress == sa && connecta )
         {
+            std::string testConnection1="testConnection"+std::to_string(random);
+            
             std::string testConnection=std::string(buf,len);
-            if(testConnection=="testConnection")
+            if(testConnection==testConnection1)
             {
-                connecta = false;
                 std::cerr<< "connection scuccedded  to "<<sa.to_string();
-                
+                connectb =false;
             }
+
             
             
         }
@@ -326,7 +342,11 @@ int main(int argc, const char** argv) {
             if(testConnection.find("testConnection")==std::string::npos)
                 exit(-1);
             else
+            {
+                std::cerr<< "Accepted connection "<<sa.to_string()<<std::endl;
                 recivedAddress.Send((void*)testConnection.c_str(), testConnection.length());
+            }
+            
             
             
         }
@@ -337,7 +357,10 @@ int main(int argc, const char** argv) {
             if(testConnection.find("testConnection")==std::string::npos)
                 exit(-1);
             else
+            {
+                std::cerr<< "Accepted connection "<<sb.to_string()<<std::endl;
                 recivedAddress.Send((void*)testConnection.c_str(), testConnection.length());
+            }
 
             
         }
