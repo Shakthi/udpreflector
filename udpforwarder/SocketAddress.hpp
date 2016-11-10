@@ -22,9 +22,6 @@ class SocketAddress
     
     
     
-    
-    
-    
     sockaddr_in getAddress(std::string address)
     {
         std::string::size_type colonpos=address.find(':');
@@ -65,6 +62,17 @@ class SocketAddress
 public:
     static int fd;
     
+    static std::string  getIPaddressStringforHost(std::string hostname )
+    {
+        struct hostent *h = gethostbyname(hostname.c_str());
+        if (!h || !h->h_length) {
+            std::cerr<< "could not resolve "<<hostname<<":"<< hstrerror(h_errno)<<std::endl;
+            exit(-1);
+        }
+        return inet_ntoa(*(in_addr*) h->h_addr);
+    }
+    
+
     SocketAddress()
     {}
     SocketAddress(std::string hostport)
